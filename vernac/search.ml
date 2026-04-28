@@ -18,6 +18,7 @@ open Environ
 open Pattern
 open Libnames
 open Vernacexpr
+open Cbv
 
 module NamedDecl = Context.Named.Declaration
 
@@ -225,7 +226,12 @@ let search_filter : _ -> filter_function = fun query gr kind env sigma typ -> ma
   List.exists (fun (env,typ) ->
       let f =
         if head then Constr_matching.is_matching_head
-        else Constr_matching.is_matching_appsubterm ~closed:false in
+        else fun env sigma pat econstr ->
+          if Constr_matching.is_matching_appsubterm ~closed:false env sigma pat econstr then true else
+          let cbv_infos = create_cbv_infos RedFlags.delta env sigma ~strong:true in
+          let normalized = cbv_norm cbv_infos econstr in
+          Constr_matching.is_matching_appsubterm ~closed:false env sigma pat normalized
+      in
       f env sigma pat (EConstr.of_constr typ)) typl
 | GlobSearchString s ->
   String.string_contains ~where:(name_of_reference gr) ~what:s
