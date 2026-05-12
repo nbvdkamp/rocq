@@ -562,8 +562,9 @@ let rec norm_head info env pattern stack =
 
   (* | Const sp -> *)
   | PRef ConstRef const ->
-    Reductionops.reduction_effect_hook info.env info.sigma
-      const (lazy (reify_stack pattern (strip_app stack)));
+    (* Disabling this: (seems to be for plugins maybe?)
+      Reductionops.reduction_effect_hook info.env info.sigma
+      const (lazy (reify_stack pattern (strip_app stack))); *)
     norm_head_ref 0 info env stack (ConstKey const) pattern
 
   | PLetIn (na, b, u, c) ->
