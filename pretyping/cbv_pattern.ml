@@ -96,7 +96,7 @@ type cbv_value =
 and cbv_stack =
   | TOP
   | APP of cbv_value list * cbv_stack
-  | CASE of constr_pattern array * case_return * case_branch array * Constr.case_invert * case_info * cbv_value subs * cbv_stack
+  (* | CASE of constr_pattern array * case_return * case_branch array * Constr.case_invert * case_info * cbv_value subs * cbv_stack *)
   | PROJ of Projection.t * cbv_stack
 
 (* les vars pourraient etre des constr,
@@ -126,7 +126,7 @@ let rec shift_value n = function
 and shift_stack n = function (* Slow *)
   | TOP -> TOP
   | APP (args, stk) -> APP (List.map (shift_value n) args, shift_stack n stk)
-  | CASE (pms,c,b,iv,i,s,stk) -> CASE (pms,c,b,iv,i,subs_shft(n,s), shift_stack n stk)
+  (* | CASE (pms,c,b,iv,i,s,stk) -> CASE (pms,c,b,iv,i,subs_shft(n,s), shift_stack n stk) *)
   | PROJ (p, stk) -> PROJ (p, shift_stack n stk)
 
 let shift_value n v =
@@ -170,7 +170,7 @@ let rec stack_concat stk1 stk2 =
   match stk1 with
       TOP -> stk2
     | APP(v,stk1') -> APP(v,stack_concat stk1' stk2)
-    | CASE(pms,c,b,iv,i,s,stk1') -> CASE(pms,c,b,iv,i,s,stack_concat stk1' stk2)
+    (* | CASE(pms,c,b,iv,i,s,stk1') -> CASE(pms,c,b,iv,i,s,stack_concat stk1' stk2) *)
     | PROJ (p,stk1') -> PROJ (p,stack_concat stk1' stk2)
 
 (* merge stacks when there is no shifts in between *)
@@ -227,7 +227,7 @@ let destack head stack =
 let rec fixp_reducible_symb_stk = function
   | TOP -> true
   | APP (_, stk) -> fixp_reducible_symb_stk stk
-  | CASE _ | PROJ _ -> false
+  (*| CASE _ *) | PROJ _ -> false
 
 (* Tests if fixpoint reduction is possible. *)
 let fixp_reducible flgs ((reci,i),_) stk =
@@ -252,7 +252,7 @@ let fixp_reducible flgs ((reci,i),_) stk =
 let cofixp_reducible flgs _ stk =
   if red_set flgs fCOFIX then
     match stk with
-      | (CASE _ | PROJ _ | APP(_,CASE _) | APP(_,PROJ _)) -> true
+      | ((*CASE _ |*) PROJ _ | (*APP(_,CASE _) |*) APP(_,PROJ _)) -> true
       | _ -> false
   else
     false
@@ -419,10 +419,10 @@ let rec reify_stack t = function
   | TOP -> t
   | APP (args,st) ->
       reify_stack (PApp(t,Array.map_of_list reify_value args)) st
-  | CASE (pms,ty,br,iv,ci,env,st) ->
+  (* | CASE (pms,ty,br,iv,ci,env,st) ->
       reify_stack
         (apply_env env @@ PCase (ci, pms, ty, iv, t,br))
-        st
+        st *)
   | PROJ (p, st) ->
        reify_stack (PProj (p, t)) st
 
@@ -536,7 +536,8 @@ let rec norm_head info env pattern stack =
     in
     let stack = APP (Array.fold_right fold args rem, stack) in
     norm_head info env head stack
-  | PCase (ci,pms,p,iv,c,v) -> norm_head info env c (CASE(pms,p,v,iv,ci,env,stack))
+  | PCase _ -> raise PatternFailure
+  (* | PCase (ci,pms,p,iv,c,v) -> norm_head info env c (CASE(pms,p,v,iv,ci,env,stack)) *)
   (* | PCast (ct,_,_) -> norm_head info env ct stack *)
 
   | PProj (p, c) ->
@@ -594,6 +595,11 @@ let rec norm_head info env pattern stack =
   | PFix (lij, fix) -> (FIX((lij, fix),env,[]), stack)
   | PCoFix (m, cofix) -> (COFIX((m, cofix),env,[]), stack)
   | PRef VarRef _ -> ()
+  (*TODO: fill in and probably move these *)
+  | PSoApp _ -> ()
+  | PIf _ -> ()
+  | PExtra _ -> ()
+  
   | PRef ConstructRef c -> (CONSTRUCT(c, []), stack)
 
   | PArray(t,def,ty) ->
@@ -800,7 +806,7 @@ and cbv_match_arg_pattern info env ctx psubst p t =
       let psubst, stk = cbv_apply_rule info env ctx psubst es stk in
       match stk with
       | TOP -> psubst
-      | APP _| CASE _ | PROJ _ -> raise PatternFailure
+      | APP _ | (*CASE _ |*) PROJ _ -> raise PatternFailure
 
 and cbv_match_arg_pattern_lift info env ctx n psubst p t =
   let env = subs_liftn n env in
@@ -932,7 +938,7 @@ let rec apply_stack info t = function
   | APP (args,st) ->
     (* Note: should "theoretically" use a right-to-left version of map_of_list *)
       apply_stack info (PApp(t,Array.map_of_list (cbv_norm_value info) args)) st
-  | CASE (pms,ty,br,iv,ci,env,st) ->
+  (* | CASE (pms,ty,br,iv,ci,env,st) ->
     (* FIXME: Prevent this expansion by caching whether an inductive contains let-bindings *)
     let (_, (ty,r), _, _, br) = Inductive.expand_case info.env (ci, pms, ty, iv, mkProp, br) in
     let ty =
@@ -958,7 +964,7 @@ let rec apply_stack info t = function
       apply_stack info
         (PCase (ci, Array.map (aux env) pms, (map_ctx ty,r), iv, t,
                     Array.map map_ctx br))
-        st
+        st *)
   | PROJ (p, st) ->
        apply_stack info (PProj (p, t)) st
 
