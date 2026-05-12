@@ -20,6 +20,8 @@ val constr_pattern_eq : Environ.env -> constr_pattern -> constr_pattern -> bool
 val subst_pattern : Environ.env -> Evd.evar_map -> substitution -> constr_pattern -> constr_pattern
 val subst_uninstantiated_pattern : Environ.env -> Evd.evar_map -> substitution -> uninstantiated_pattern -> uninstantiated_pattern
 
+val it_mkPLambda_or_LetIn  : 'a constr_pattern_r -> (Name.t * 'b * 'a constr_pattern_r option * 'a constr_pattern_r) list -> 'a constr_pattern_r
+
 val noccurn_pattern : int -> _ constr_pattern_r -> bool
 
 exception BoundPattern
