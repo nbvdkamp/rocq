@@ -684,7 +684,7 @@ and cbv_stack_value info env = function
     cbv_stack_term info stk envf redfix
 
   (* constructor in a Case -> IOTA *)
-  | (CONSTRUCT(((sp,n),_),[]), APP(args,CASE(pms,_p,br,iv,ci,env,stk)))
+  (* | (CONSTRUCT(((sp,n),_),[]), APP(args,CASE(pms,_p,br,iv,ci,env,stk)))
     when red_set info.reds fMATCH ->
     let cargs = List.skipn ci.ci_npar args in
     let env =
@@ -696,9 +696,9 @@ and cbv_stack_value info env = function
         cbv_subst_of_rel_context_instance_list mkclos ctx cargs env
     in
     cbv_stack_term info stk env br.(n-1)
-
+ *)
   (* constructor of arity 0 in a Case -> IOTA *)
-  | (CONSTRUCT(((sp, n), _),[]), CASE(pms,_,br,_,ci,env,stk))
+  (* | (CONSTRUCT(((sp, n), _),[]), CASE(pms,_,br,_,ci,env,stk))
     when red_set info.reds fMATCH ->
     let env =
       if (Int.equal ci.ci_cstr_ndecls.(n - 1) ci.ci_cstr_nargs.(n - 1)) then (* no lets *)
@@ -709,7 +709,7 @@ and cbv_stack_value info env = function
         cbv_subst_of_rel_context_instance_list mkclos ctx [] env
     in
     cbv_stack_term info stk env br.(n-1)
-
+ *)
   (* constructor in a Projection -> IOTA *)
   | (CONSTRUCT(((sp,n),u),[]), APP(args,PROJ(p,stk)))
     when red_set info.reds fMATCH && Projection.unfolded p ->
@@ -895,7 +895,7 @@ and cbv_apply_rule info env ctx psubst es stk =
         let usedpargs, rempargs = Array.chop na pargs in
         let psubst = Array.fold_left2 (cbv_match_arg_pattern info env ctx) psubst usedpargs args in
         cbv_apply_rule info env ctx psubst (PEApp rempargs :: e) s
-  | Declarations.PECase (pind, pret, pbrs) :: e, CASE (pms, (p, _), brs, iv, ci, env, s) ->
+  (* | Declarations.PECase (pind, pret, pbrs) :: e, CASE (pms, (p, _), brs, iv, ci, env, s) ->
       if not @@ Environ.QInd.equal info.env pind ci.ci_ind then raise PatternFailure;
       let specif = Inductive.lookup_mind_specif info.env ci.ci_ind in
       let ntys_ret = Inductive.expand_arity specif (ci.ci_ind, UVars.Instance.empty) pms (fst p) in
@@ -904,7 +904,7 @@ and cbv_apply_rule info env ctx psubst es stk =
       let brs = Array.map2 (fun ctx' br -> List.length ctx', ctx' @ ctx, (snd br)) ntys_brs brs in
       let psubst = cbv_match_arg_pattern_lift info env (ntys_ret @ ctx) (List.length ntys_ret) psubst pret (snd p) in
       let psubst = Array.fold_left2 (fun psubst pat (n, ctx, br) -> cbv_match_arg_pattern_lift info env (apply_env_context env ctx) n psubst pat br) psubst pbrs brs in
-      cbv_apply_rule info env ctx psubst e s
+      cbv_apply_rule info env ctx psubst e s *)
   | Declarations.PEProj proj :: e, PROJ (proj', s) ->
       if not @@ Environ.QProjection.Repr.equal info.env proj (Projection.repr proj') then raise PatternFailure;
       cbv_apply_rule info env ctx psubst e s
