@@ -231,6 +231,47 @@ let pattern_of_constr ~broken env sigma t =
 let legacy_bad_pattern_of_constr env sigma c : constr_pattern = pattern_of_constr ~broken:true env sigma c
 let pattern_of_constr env sigma c = pattern_of_constr ~broken:false env sigma c
 
+let debug_print_pattern pattern : Pp.t =
+  let pp_patvar id = str (Id.to_string id) in
+  let pp_patvar_opt = function 
+    | Some id -> pp_patvar id
+    | None -> str "_"
+  in
+  let pp_name n = pp_patvar_opt (Name.to_option n) in
+  let pp_constr name content =
+    hov 1 (str name ++ surround (prlist_with_sep pr_comma (fun x -> x) content))
+  in
+  let rec pp_pattern_opt = function 
+    | Some p -> pp p
+    | None -> str "_"
+  and pr_array items = hov 1 (str "[" ++ (prvect_with_sep pr_semicolon pp items) ++ str "]") 
+  and pr_list items = hov 1 (str "[" ++ (prlist_with_sep pr_semicolon pp items) ++ str "]") 
+  and pp = function
+  | PApp (p,pl) -> pp_constr "PApp" [pp  p; pr_array pl]
+  | PSoApp (n,pl) -> pp_constr "PSoApp" [pp_patvar n; pr_list pl]
+  | PLambda (name,a,b) -> pp_constr "PLambda" [pp_name name; pp a; pp b]
+  | PProd (name,a,b) -> pp_constr "PProd" [pp_name name; pp a; pp b]
+  | PLetIn (name,a,t,b) -> pp_constr "PLetIn" [pp_name name; pp a; pp_pattern_opt t; pp b]
+  | PIf (c,b1,b2) -> pp_constr "PIf" [pp c; pp b1; pp b2]
+  | PCase (ci,po,p,pl) -> pp_constr "PCase" [str "TODO"]
+  | PProj (proj,pc) -> pp_constr "PProj" [Projection.print proj; pp pc]
+  | PFix (lni,(lna,tl,bl)) -> pp_constr "PFix" [str "TODO"]
+  | PCoFix (ln,(lna,tl,bl)) -> pp_constr "PCoFix" [str "TODO"]
+  | PArray (t,def,ty) -> pp_constr "PArray" [pr_array t; pp def; pp ty]
+  | PEvar (ev,ps) -> pp_constr "PEvar" [Evar.print ev; pr_list ps]
+  (* Non recursive *)
+  | PVar n -> pp_constr "PVar" [pp_patvar n]
+  | PRel i -> pp_constr "PRel" [int i; str "TODO"]
+  | PRef ref  -> pp_constr "PRef" [GlobRef.print ref]
+  | PSort s  -> pp_constr "PSort"  [UnivGen.QualityOrSet.pr Sorts.Quality.raw_printer s]
+  | PMeta id -> pp_constr "PMeta" [pp_patvar_opt id]
+  | PInt i -> pp_constr "PInt" [int64 (Uint63.to_int64 i)]
+  | PFloat f -> pp_constr "PFloat" [real (Float64.to_float f)]
+  | PString s -> pp_constr "PString" [quote (str (Pstring.to_string s))]
+  | PExtra x -> pp_constr "PExtra" [str "Not reached"]
+  in
+  pp pattern
+
 (* To process patterns, we need a translation without typing at all. *)
 
 let map_pattern_with_binders_gen (type a b) g f fgen l : a constr_pattern_r -> b constr_pattern_r = function
