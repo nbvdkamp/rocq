@@ -45,6 +45,8 @@ val legacy_bad_pattern_of_constr : Environ.env -> Evd.evar_map -> EConstr.constr
 
 val pattern_of_glob_constr : Environ.env -> glob_constr -> Id.Set.t * uninstantiated_pattern
 
+val debug_print_pattern : constr_pattern -> Pp.t
+
 val map_pattern_with_binders : (Name.t -> 'a -> 'a) ->
   ('a -> 'i constr_pattern_r -> 'i constr_pattern_r) -> 'a -> 'i constr_pattern_r -> 'i constr_pattern_r
 
