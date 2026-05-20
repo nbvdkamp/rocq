@@ -310,8 +310,9 @@ let search_filter : _ -> filter_function = fun query gr kind env sigma typ -> ma
         else fun env sigma pat econstr ->
           if Constr_matching.is_matching_appsubterm ~closed:false env sigma pat econstr then true else
           let cbv_infos = create_cbv_infos RedFlags.delta env sigma ~strong:true in
-          let normalized = cbv_norm cbv_infos econstr in
-          Constr_matching.is_matching_appsubterm ~closed:false env sigma pat normalized
+          let normalized_term = cbv_norm cbv_infos econstr in
+          let normalized_pattern = Patternops.delta_normalize_pattern (env, sigma) pat in
+          Constr_matching.is_matching_appsubterm ~closed:false env sigma normalized_pattern normalized_term
       in
       f env sigma pat (EConstr.of_constr typ)) typl
 | GlobSearchString s -> string_contains_upto ~pattern:s (name_of_reference gr)

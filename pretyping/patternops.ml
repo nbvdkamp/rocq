@@ -312,6 +312,19 @@ let rec liftn_pattern k n = function
 
 let lift_pattern k = liftn_pattern k 1
 
+let rec delta_normalize_pattern (env, sigma) = function
+  | PRef ConstRef(c) as ref ->
+    (let constant = EConstr.lookup_constant env sigma c in
+      match constant.const_body with
+      | Declarations.Def c ->
+        (* perform delta reduction on the term *)
+        let infos = Cbv.create_cbv_infos RedFlags.delta ~strong:true env sigma in
+        let c = Cbv.cbv_norm infos (EConstr.of_constr c) in
+        (* and convert it to a pattern *)
+        pattern_of_constr env sigma c
+      | _ -> ref)
+  | x -> map_pattern_with_binders (fun _name -> (fun x -> x)) delta_normalize_pattern (env, sigma) x
+
 let rec subst_pattern_gen
   : 'a. (_ -> 'a -> 'a) -> _ -> _ -> _ -> 'a constr_pattern_r -> 'a constr_pattern_r
   = fun (type a) gsubst env sigma subst (pat: a constr_pattern_r) ->
