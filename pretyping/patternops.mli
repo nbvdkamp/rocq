@@ -52,6 +52,8 @@ val map_pattern_with_binders : (Name.t -> 'a -> 'a) ->
 
 val lift_pattern : int -> 'i constr_pattern_r -> 'i constr_pattern_r
 
+val delta_normalize_pattern : (Environ.env * Evd.evar_map) -> constr_pattern -> constr_pattern
+
 (** Interp genargs *)
 
 type 'a pat_interp_fun = Environ.env -> Evd.evar_map -> Ltac_pretype.ltac_var_map
