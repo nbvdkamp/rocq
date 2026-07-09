@@ -269,7 +269,17 @@ let matches_core env sigma allow_bound_rels (binding_vars, pat) c =
 
   | PRef (GlobRef.ConstRef cst1), Const (cst2, _) ->
     if Environ.QConstant.equal env cst1 cst2 then subst
-    else raise PatternMatchingFailure
+    else (* unfold both consts *)
+        (let constant1 = EConstr.lookup_constant env sigma cst1 in
+        match constant1.const_body with
+        | Declarations.Def c ->
+            let pdef = pattern_of_constr env sigma (EConstr.of_constr c) in
+            let constant2 = EConstr.lookup_constant env sigma cst2 in
+            (match constant2.const_body with
+            | Declarations.Def c2 ->
+                sorec ctx env subst pdef (EConstr.of_constr c2)
+            | _ -> raise PatternMatchingFailure)
+        | _ -> raise PatternMatchingFailure)
 
   | PRef (GlobRef.IndRef ind1), Ind (ind2, _) ->
     if Environ.QInd.equal env ind1 ind2 then subst
@@ -458,6 +468,22 @@ let matches_core env sigma allow_bound_rels (binding_vars, pat) c =
     let () = if not (Int.equal (Array.length pt) (Array.length t)) then raise PatternMatchingFailure in
     sorec ctx env (sorec ctx env (Array.fold_left2 (sorec ctx env) subst pt t) pdef def) pty ty
 
+  | PRef (GlobRef.ConstRef cst), _ ->
+    (let constant = EConstr.lookup_constant env sigma cst in
+      match constant.const_body with
+      | Declarations.Def c ->
+        (* convert the def to a pattern *)
+        let pdef = pattern_of_constr env sigma (EConstr.of_constr c) in
+        sorec ctx env subst pdef t
+      | _ -> raise PatternMatchingFailure)
+
+  | _, Const (cst, _) ->
+    (let constant = EConstr.lookup_constant env sigma cst in
+      match constant.const_body with
+      | Declarations.Def c ->
+        sorec ctx env subst p (EConstr.of_constr c)
+      | _ -> raise PatternMatchingFailure)
+
   | (PRef _ | PVar _ | PRel _ | PApp _ | PProj _ | PLambda _
       | PProd _ | PLetIn _ | PSort _ | PIf _ | PCase _
       | PFix _ | PCoFix _| PEvar _ | PInt _ | PFloat _
@@ -521,8 +547,11 @@ let authorized_occ env sigma closed pat c mk_ctx =
 
 let subargs env v = Array.map_to_list (fun c -> (env, c)) v
 
+module StringSet = Set.Make(String)
+
 (* Tries to match a subterm of [c] with [pat] *)
 let sub_match ?(closed=true) env sigma pat c =
+  let unfolded_definition_names = ref StringSet.empty in
   let open EConstr in
   let rec aux env c mk_ctx next =
   let here = authorized_occ env sigma closed pat c mk_ctx in
@@ -614,7 +643,22 @@ let sub_match ?(closed=true) env sigma pat c =
     in
     let sub = (env,def) :: (env,ty) :: subargs env t in
     try_aux sub next_mk_ctx next
-  | Construct _|Ind _|Evar _|Const _|Rel _|Meta _|Var _|Sort _|Int _|Float _|String _ ->
+  | Const (cst, instance) -> 
+    let cst_name = Id.to_string (snd (KerName.repr (Constant.user cst))) in
+    if not (StringSet.mem cst_name !unfolded_definition_names) then
+    (unfolded_definition_names := StringSet.add cst_name !unfolded_definition_names;
+      let constant = EConstr.lookup_constant env sigma cst in
+      match constant.const_body with
+      | Declarations.Def c ->
+            (* Unfold the definition: *)
+            let next_mk_ctx = function
+            | [c] -> mk_ctx (c)
+            | _ -> assert false
+            in
+            try_aux [env, (EConstr.of_constr c)] next_mk_ctx next
+      | _ -> next ()
+    ) else next()
+  | Construct _|Ind _|Evar _|Rel _|Meta _|Var _|Sort _|Int _|Float _|String _ ->
     next ()
   in
   here next
