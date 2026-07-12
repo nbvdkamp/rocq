@@ -547,11 +547,9 @@ let authorized_occ env sigma closed pat c mk_ctx =
 
 let subargs env v = Array.map_to_list (fun c -> (env, c)) v
 
-module StringSet = Set.Make(String)
-
 (* Tries to match a subterm of [c] with [pat] *)
 let sub_match ?(closed=true) env sigma pat c =
-  let unfolded_definition_names = ref StringSet.empty in
+  let unfolded_definition_names = ref KerName.Set.empty in
   let open EConstr in
   let rec aux env c mk_ctx next =
   let here = authorized_occ env sigma closed pat c mk_ctx in
@@ -644,9 +642,9 @@ let sub_match ?(closed=true) env sigma pat c =
     let sub = (env,def) :: (env,ty) :: subargs env t in
     try_aux sub next_mk_ctx next
   | Const (cst, instance) -> 
-    let cst_name = Id.to_string (snd (KerName.repr (Constant.user cst))) in
-    if not (StringSet.mem cst_name !unfolded_definition_names) then
-    (unfolded_definition_names := StringSet.add cst_name !unfolded_definition_names;
+    let cst_name = Constant.user cst in
+    if not (KerName.Set.mem cst_name !unfolded_definition_names) then
+    (unfolded_definition_names := KerName.Set.add cst_name !unfolded_definition_names;
       let constant = EConstr.lookup_constant env sigma cst in
       match constant.const_body with
       | Declarations.Def c ->
