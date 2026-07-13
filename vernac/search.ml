@@ -292,6 +292,12 @@ let string_contains_upto ?limit ~pattern s =
     let d = CString.edit_distance_substring ~limit:(limit+1) ~pattern s in
      d <= limit
 
+let { Goptions.get = unfold_during_matching } =
+  Goptions.declare_bool_option_and_ref ~key:["Search";"Unfold";"During";"Matching"] ~value:false ()
+
+let { Goptions.get = unfold_cbv } =
+  Goptions.declare_bool_option_and_ref ~key:["Search";"Unfold";"Cbv"] ~value:false ()
+
 let search_filter : _ -> filter_function = fun query gr kind env sigma typ -> match query with
 | GlobSearchSubPattern (where,head,pat) ->
   let open Context.Rel.Declaration in
@@ -307,13 +313,16 @@ let search_filter : _ -> filter_function = fun query gr kind env sigma typ -> ma
   List.exists (fun (env,typ) ->
       let f =
         if head then Constr_matching.is_matching_head
-        else if true then fun env sigma pat econstr ->
-          if Constr_matching.is_matching_appsubterm ~closed:false env sigma pat econstr then true else
-          let cbv_infos = create_cbv_infos RedFlags.delta env sigma ~strong:true in
-          let normalized_term = cbv_norm cbv_infos econstr in
-          let normalized_pattern = Patternops.delta_normalize_pattern (env, sigma) pat in
-          Constr_matching.is_matching_appsubterm ~closed:false env sigma normalized_pattern normalized_term
-        else Constr_matching_unfolding.is_matching_appsubterm ~closed:false
+        else if unfold_during_matching() then
+          Constr_matching_unfolding.is_matching_appsubterm ~closed:false
+        else if unfold_cbv() then
+          fun env sigma pat econstr ->
+            let cbv_infos = create_cbv_infos RedFlags.delta env sigma ~strong:true in
+            let normalized_term = cbv_norm cbv_infos econstr in
+            let normalized_pattern = Patternops.delta_normalize_pattern (env, sigma) pat in
+            Constr_matching.is_matching_appsubterm ~closed:false env sigma normalized_pattern normalized_term
+        else
+          Constr_matching.is_matching_appsubterm ~closed:false
       in
       f env sigma pat (EConstr.of_constr typ)) typl
 | GlobSearchString s -> string_contains_upto ~pattern:s (name_of_reference gr)
