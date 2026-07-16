@@ -548,7 +548,7 @@ let authorized_occ env sigma closed pat c mk_ctx =
 let subargs env v = Array.map_to_list (fun c -> (env, c)) v
 
 (* Tries to match a subterm of [c] with [pat] *)
-let sub_match ?(closed=true) env sigma pat c =
+let sub_match ?(closed=true) ?(cache_unfolding=true) env sigma pat c =
   let unfolded_definition_names = ref KerName.Set.empty in
   let open EConstr in
   let rec aux env c mk_ctx next =
@@ -643,8 +643,8 @@ let sub_match ?(closed=true) env sigma pat c =
     try_aux sub next_mk_ctx next
   | Const (cst, instance) -> 
     let cst_name = Constant.user cst in
-    if not (KerName.Set.mem cst_name !unfolded_definition_names) then
-    (unfolded_definition_names := KerName.Set.add cst_name !unfolded_definition_names;
+    if not cache_unfolding || not (KerName.Set.mem cst_name !unfolded_definition_names) then
+    ((if cache_unfolding then unfolded_definition_names := KerName.Set.add cst_name !unfolded_definition_names);
       let constant = EConstr.lookup_constant env sigma cst in
       match constant.const_body with
       | Declarations.Def c ->
@@ -686,7 +686,7 @@ let is_matching_head env sigma pat c =
   try let _ = matches_head env sigma pat c in true
   with PatternMatchingFailure -> false
 
-let is_matching_appsubterm ?(closed=true) env sigma pat c =
+let is_matching_appsubterm ?(closed=true) ?(cache_unfolding=true) env sigma pat c =
   let pat = (Id.Set.empty,pat) in
-  let results = sub_match ~closed env sigma pat c in
+  let results = sub_match ~closed ~cache_unfolding env sigma pat c in
   not (IStream.is_empty results)
