@@ -313,16 +313,6 @@ let rec liftn_pattern k n = function
 let lift_pattern k = liftn_pattern k 1
 
 let rec delta_normalize_pattern (env, sigma) = function
-  (* This is not enough to make local_binding_unfolding.v work, x isn't in context because we need to put it there when going trhough a let*)
-  | PRel n as rel ->
-    (match EConstr.lookup_rel n env with
-    | LocalDef (_,body,_) ->
-      (* perform delta reduction on the term *)
-      let infos = Cbv.create_cbv_infos RedFlags.delta ~strong:true env sigma in
-      let c = Cbv.cbv_norm infos (EConstr.Vars.lift n body) in
-      (* and convert it to a pattern *)
-      pattern_of_constr env sigma c
-    | _ -> rel)
   | PRef ConstRef(c) as ref ->
     (let constant = EConstr.lookup_constant env sigma c in
       match constant.const_body with
