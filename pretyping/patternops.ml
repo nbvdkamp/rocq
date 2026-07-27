@@ -238,6 +238,8 @@ let debug_print_pattern pattern : Pp.t =
     | None -> str "_"
   in
   let pp_name n = pp_patvar_opt (Name.to_option n) in
+  let pp_name_array ns = hov 1 (str "[" ++ (prvect_with_sep pr_semicolon pp_name ns) ++ str "]") in
+  let pp_opt o = match o with Some(p) -> p | None -> str "None" in
   let pp_constr name content =
     hov 1 (str name ++ surround (prlist_with_sep pr_comma (fun x -> x) content))
   in
@@ -253,10 +255,14 @@ let debug_print_pattern pattern : Pp.t =
   | PProd (name,a,b) -> pp_constr "PProd" [pp_name name; pp a; pp b]
   | PLetIn (name,a,t,b) -> pp_constr "PLetIn" [pp_name name; pp a; pp_pattern_opt t; pp b]
   | PIf (c,b1,b2) -> pp_constr "PIf" [pp c; pp b1; pp b2]
-  | PCase (ci,po,p,pl) -> pp_constr "PCase" [str "TODO"]
+  | PCase (ci,po,p,pl) -> pp_constr "PCase" [
+      pp_opt (Option.map (fun x -> pp_name_array (fst x) ++ str " Type: " ++ pp (snd x)) po);
+      pp p;
+      pr_list (List.map (fun x -> let (_, _, y) = x in y) pl)
+    ]
   | PProj (proj,pc) -> pp_constr "PProj" [Projection.print proj; pp pc]
-  | PFix (lni,(lna,tl,bl)) -> pp_constr "PFix" [str "TODO"]
-  | PCoFix (ln,(lna,tl,bl)) -> pp_constr "PCoFix" [str "TODO"]
+  | PFix (lni,(lna,tl,bl)) -> pp_constr "PFix" [pp_name_array lna; pr_array tl; pr_array bl]
+  | PCoFix (lni,(lna,tl,bl)) -> pp_constr "PCoFix" [pp_name_array lna; pr_array tl; pr_array bl]
   | PArray (t,def,ty) -> pp_constr "PArray" [pr_array t; pp def; pp ty]
   | PEvar (ev,ps) -> pp_constr "PEvar" [Evar.print ev; pr_list ps]
   (* Non recursive *)
