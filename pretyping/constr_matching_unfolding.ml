@@ -272,12 +272,11 @@ let matches_core env sigma allow_bound_rels (binding_vars, pat) c =
     else (* unfold both consts *)
         (let constant1 = EConstr.lookup_constant env sigma cst1 in
         match constant1.const_body with
-        | Declarations.Def c ->
-            let pdef = pattern_of_constr env sigma (EConstr.of_constr c) in
+        | Declarations.Def pdef ->
             let constant2 = EConstr.lookup_constant env sigma cst2 in
             (match constant2.const_body with
-            | Declarations.Def c2 ->
-                sorec ctx env subst pdef (EConstr.of_constr c2)
+            | Declarations.Def tdef ->
+                if eq_constr_mod_unfolding env sigma (EConstr.of_constr pdef) (EConstr.of_constr tdef) then subst else raise PatternMatchingFailure
             | _ -> raise PatternMatchingFailure)
         | _ -> raise PatternMatchingFailure)
 
@@ -471,10 +470,8 @@ let matches_core env sigma allow_bound_rels (binding_vars, pat) c =
   | PRef (GlobRef.ConstRef cst), _ ->
     (let constant = EConstr.lookup_constant env sigma cst in
       match constant.const_body with
-      | Declarations.Def c ->
-        (* convert the def to a pattern *)
-        let pdef = pattern_of_constr env sigma (EConstr.of_constr c) in
-        sorec ctx env subst pdef t
+      | Declarations.Def def ->
+        if eq_constr_mod_unfolding env sigma (EConstr.of_constr def) t then subst else raise PatternMatchingFailure
       | _ -> raise PatternMatchingFailure)
 
   | _, Const (cst, _) ->
