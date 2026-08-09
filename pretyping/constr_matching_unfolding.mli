@@ -63,10 +63,6 @@ val empty_context : context
 val repr_context : context -> EConstr.t
 val instantiate_context : context -> EConstr.t -> EConstr.t
 
-(** The type of subterm matching results: a substitution + a context
-   (whose hole is denoted here with [special_meta]) *)
-type matching_result = { m_sub : bound_ident_map * patvar_map }
-
 (** [is_matching_appsubterm pat c] tells if a subterm of [c] matches
    against [pat] taking partial subterms into consideration *)
 val is_matching_appsubterm : ?closed:bool -> ?cache_unfolding:bool -> env -> Evd.evar_map -> constr_pattern -> constr -> bool

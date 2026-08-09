@@ -21,7 +21,6 @@ open Vars
 open Pattern
 open Patternops
 open Context.Rel.Declaration
-open Ltac_pretype
 (*i*)
 
 (* Given a term with second-order variables in it,
@@ -513,11 +512,6 @@ let instantiate_context ctxt c =
   let c = EConstr.Unsafe.to_constr c in
   EConstr.of_constr (subst_meta [special_meta, c] ctxt)
 
-type matching_result =
-    { m_sub : bound_ident_map * patvar_map }
-
-let mkresult s n = IStream.Cons ( { m_sub=s } , (IStream.thunk n) )
-
 let isPMeta = function PMeta _ -> true | _ -> false
 
 let matches_head env sigma pat c =
@@ -537,9 +531,9 @@ let authorized_occ env sigma closed pat c =
   try
     let subst = matches_core_closed env sigma pat c in
     if closed && Id.Map.exists (fun _ c -> not (closed0 sigma c)) (snd subst)
-    then (fun next -> next ())
-    else (fun next -> mkresult subst next)
-  with PatternMatchingFailure -> (fun next -> next ())
+    then false
+    else true
+  with PatternMatchingFailure -> false
 
 let subargs env v = Array.map_to_list (fun c -> (env, c)) v
 
@@ -609,7 +603,7 @@ let sub_match ?(closed=true) ?(cache_unfolding=true) env sigma pat c =
   | Construct _|Ind _|Evar _|Rel _|Meta _|Var _|Sort _|Int _|Float _|String _ ->
     next ()
   in
-  here next
+  here || next()
 
   (* Tries [sub_match] for all terms in the list *)
   and try_aux lc next =
@@ -621,9 +615,7 @@ let sub_match ?(closed=true) ?(cache_unfolding=true) env sigma pat c =
         aux env c next
     in
     try_sub_match_rec [] lc in
-  let lempty () = IStream.Nil in
-  let result () = aux env c lempty in
-  IStream.thunk result
+  aux env c (fun () -> false)
 
 let is_matching env sigma pat c =
   try let _ = matches env sigma pat c in true
@@ -635,5 +627,4 @@ let is_matching_head env sigma pat c =
 
 let is_matching_appsubterm ?(closed=true) ?(cache_unfolding=true) env sigma pat c =
   let pat = (Id.Set.empty,pat) in
-  let results = sub_match ~closed ~cache_unfolding env sigma pat c in
-  not (IStream.is_empty results)
+  sub_match ~closed ~cache_unfolding env sigma pat c
