@@ -607,14 +607,14 @@ let sub_match ?(closed=true) ?(cache_unfolding=true) env sigma pat c =
 
   (* Tries [sub_match] for all terms in the list *)
   and try_aux lc next =
-    let rec try_sub_match_rec lacc lc =
+    let rec try_sub_match_rec lc =
       match lc with
       | [] -> next ()
       | (env, c) :: tl ->
-        let next () = try_sub_match_rec (c :: lacc) tl in
+        let next () = try_sub_match_rec tl in
         aux env c next
     in
-    try_sub_match_rec [] lc in
+    try_sub_match_rec lc in
   aux env c (fun () -> false)
 
 let is_matching env sigma pat c =
