@@ -541,23 +541,23 @@ let subargs env v = Array.map_to_list (fun c -> (env, c)) v
 let sub_match ?(closed=true) ?(cache_unfolding=true) env sigma pat c =
   let unfolded_definition_names = ref KerName.Set.empty in
   let open EConstr in
-  let rec aux env c next =
+  let rec aux env c =
   let here = authorized_occ env sigma closed pat c in
   let next () = match EConstr.kind sigma c with
-  | Cast (c1,k,c2) -> try_aux [env, c1] next
+  | Cast (c1,k,c2) -> try_aux [env, c1]
   | Lambda (x,c1,c2) ->
       let env' = EConstr.push_rel (LocalAssum (x,c1)) env in
-      try_aux [(env, c1); (env', c2)] next
+      try_aux [(env, c1); (env', c2)]
   | Prod (x,c1,c2) ->
       let env' = EConstr.push_rel (LocalAssum (x,c1)) env in
-      try_aux [(env, c1); (env', c2)] next
+      try_aux [(env, c1); (env', c2)]
   | LetIn (x,c1,t,c2) ->
       let env' = EConstr.push_rel (LocalDef (x,c1,t)) env in
-      try_aux [(env, c1); (env', c2)] next
+      try_aux [(env, c1); (env', c2)]
   | App (c1,lc) ->
      let lc1 = Array.sub lc 0 (Array.length lc - 1) in
      let app = mkApp (c1,lc1) in
-     try_aux [(env, app); (env, Array.last lc)] next
+     try_aux [(env, app); (env, Array.last lc)]
   | Case (ci,u,pms,hd0,iv,c1,lc0) ->
       let (mib, mip) = Inductive.lookup_mind_specif env ci.ci_ind in
       let (_, (hd,hdr), _, _, br) = expand_case env sigma (ci, u, pms, hd0, iv, c1, lc0) in
@@ -572,23 +572,23 @@ let sub_match ?(closed=true) ?(cache_unfolding=true) env sigma pat c =
       in
       let lc = Array.to_list (Array.mapi map br) in
       let sub = (env, c1) :: Array.fold_right (fun c accu -> (env, c) :: accu) pms (hd :: lc) in
-      try_aux sub next
+      try_aux sub
   | Fix (indx,(names,types,bodies as recdefs)) ->
     let env' = push_rec_types recdefs env in
     let sub = subargs env types @ subargs env' bodies in
-    try_aux sub next
+    try_aux sub
   | CoFix (i,(names,types,bodies as recdefs)) ->
     let env' = push_rec_types recdefs env in
     let sub = subargs env types @ subargs env' bodies in
-    try_aux sub next
+    try_aux sub
   | Proj (p,_,c') ->
     begin match Retyping.expand_projection env sigma p c' [] with
-    | term -> aux env term next
-    | exception Retyping.RetypeError _ -> next ()
+    | term -> aux env term
+    | exception Retyping.RetypeError _ -> false
     end
   | Array(u, t, def, ty) ->
     let sub = (env,def) :: (env,ty) :: subargs env t in
-    try_aux sub next
+    try_aux sub
   | Const (cst, instance) -> 
     let cst_name = Constant.user cst in
     if not cache_unfolding || not (KerName.Set.mem cst_name !unfolded_definition_names) then
@@ -596,26 +596,23 @@ let sub_match ?(closed=true) ?(cache_unfolding=true) env sigma pat c =
         let constant = EConstr.lookup_constant env sigma cst in
         match constant.const_body with
         (* Unfold the definition: *)
-        | Declarations.Def c -> try_aux [env, (EConstr.of_constr c)] next
-        | _ -> next ())
+        | Declarations.Def c -> try_aux [env, (EConstr.of_constr c)]
+        | _ -> false)
     else
-        next()
-  | Construct _|Ind _|Evar _|Rel _|Meta _|Var _|Sort _|Int _|Float _|String _ ->
-    next ()
+        false
+  | Construct _|Ind _|Evar _|Rel _|Meta _|Var _|Sort _|Int _|Float _|String _ -> false
   in
   here || next()
 
   (* Tries [sub_match] for all terms in the list *)
-  and try_aux lc next =
+  and try_aux lc =
     let rec try_sub_match_rec lc =
       match lc with
-      | [] -> next ()
-      | (env, c) :: tl ->
-        let next () = try_sub_match_rec tl in
-        aux env c next
+      | [] -> false
+      | (env, c) :: tl -> aux env c || try_sub_match_rec tl
     in
     try_sub_match_rec lc in
-  aux env c (fun () -> false)
+  aux env c
 
 let is_matching env sigma pat c =
   try let _ = matches env sigma pat c in true
