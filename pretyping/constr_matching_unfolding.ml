@@ -514,10 +514,9 @@ let instantiate_context ctxt c =
   EConstr.of_constr (subst_meta [special_meta, c] ctxt)
 
 type matching_result =
-    { m_sub : bound_ident_map * patvar_map;
-      m_ctx : context; }
+    { m_sub : bound_ident_map * patvar_map }
 
-let mkresult s c n = IStream.Cons ( { m_sub=s; m_ctx=c; } , (IStream.thunk n) )
+let mkresult s n = IStream.Cons ( { m_sub=s } , (IStream.thunk n) )
 
 let isPMeta = function PMeta _ -> true | _ -> false
 
@@ -534,12 +533,12 @@ let matches_head env sigma pat c =
   matches env sigma pat head
 
 (* Tells if it is an authorized occurrence and if the instance is closed *)
-let authorized_occ env sigma closed pat c mk_ctx =
+let authorized_occ env sigma closed pat c =
   try
     let subst = matches_core_closed env sigma pat c in
     if closed && Id.Map.exists (fun _ c -> not (closed0 sigma c)) (snd subst)
     then (fun next -> next ())
-    else (fun next -> mkresult subst (lazy (mk_ctx (mkMeta special_meta))) next)
+    else (fun next -> mkresult subst next)
   with PatternMatchingFailure -> (fun next -> next ())
 
 let subargs env v = Array.map_to_list (fun c -> (env, c)) v
@@ -548,43 +547,23 @@ let subargs env v = Array.map_to_list (fun c -> (env, c)) v
 let sub_match ?(closed=true) ?(cache_unfolding=true) env sigma pat c =
   let unfolded_definition_names = ref KerName.Set.empty in
   let open EConstr in
-  let rec aux env c mk_ctx next =
-  let here = authorized_occ env sigma closed pat c mk_ctx in
+  let rec aux env c next =
+  let here = authorized_occ env sigma closed pat c in
   let next () = match EConstr.kind sigma c with
-  | Cast (c1,k,c2) ->
-      let next_mk_ctx = function
-      | [c1] -> mk_ctx (mkCast (c1, k, c2))
-      | _ -> assert false
-      in
-      try_aux [env, c1] next_mk_ctx next
+  | Cast (c1,k,c2) -> try_aux [env, c1] next
   | Lambda (x,c1,c2) ->
-      let next_mk_ctx = function
-      | [c1; c2] -> mk_ctx (mkLambda (x, c1, c2))
-      | _ -> assert false
-      in
       let env' = EConstr.push_rel (LocalAssum (x,c1)) env in
-      try_aux [(env, c1); (env', c2)] next_mk_ctx next
+      try_aux [(env, c1); (env', c2)] next
   | Prod (x,c1,c2) ->
-      let next_mk_ctx = function
-      | [c1; c2] -> mk_ctx (mkProd (x, c1, c2))
-      | _ -> assert false
-      in
       let env' = EConstr.push_rel (LocalAssum (x,c1)) env in
-      try_aux [(env, c1); (env', c2)] next_mk_ctx next
+      try_aux [(env, c1); (env', c2)] next
   | LetIn (x,c1,t,c2) ->
-      let next_mk_ctx = function
-      | [c1; c2] -> mk_ctx (mkLetIn (x, c1, t, c2))
-      | _ -> assert false
-      in
       let env' = EConstr.push_rel (LocalDef (x,c1,t)) env in
-      try_aux [(env, c1); (env', c2)] next_mk_ctx next
+      try_aux [(env, c1); (env', c2)] next
   | App (c1,lc) ->
      let lc1 = Array.sub lc 0 (Array.length lc - 1) in
      let app = mkApp (c1,lc1) in
-     let mk_ctx = function
-       | [app';c] -> mk_ctx (mkApp (app',[|c|]))
-       | _ -> assert false in
-     try_aux [(env, app); (env, Array.last lc)] mk_ctx next
+     try_aux [(env, app); (env, Array.last lc)] next
   | Case (ci,u,pms,hd0,iv,c1,lc0) ->
       let (mib, mip) = Inductive.lookup_mind_specif env ci.ci_ind in
       let (_, (hd,hdr), _, _, br) = expand_case env sigma (ci, u, pms, hd0, iv, c1, lc0) in
@@ -598,46 +577,24 @@ let sub_match ?(closed=true) ?(cache_unfolding=true) env sigma pat c =
         (push_rel_context ctx env, c)
       in
       let lc = Array.to_list (Array.mapi map br) in
-      let next_mk_ctx = function
-      | c1 :: rem ->
-        let pms, rem = List.chop (Array.length pms) rem in
-        let pms = Array.of_list pms in
-        let hd, lc = match rem with [] -> assert false | x :: l -> (x, l) in
-        let hd = (fst (fst hd0), hd) in
-        let map_br (nas, _) br = (nas, br) in
-        mk_ctx (mkCase (ci,u,pms,(hd,hdr),iv,c1,Array.map2 map_br lc0 (Array.of_list lc)))
-      | _ -> assert false
-      in
       let sub = (env, c1) :: Array.fold_right (fun c accu -> (env, c) :: accu) pms (hd :: lc) in
-      try_aux sub next_mk_ctx next
+      try_aux sub next
   | Fix (indx,(names,types,bodies as recdefs)) ->
-    let nb_fix = Array.length types in
-    let next_mk_ctx le =
-      let (ntypes,nbodies) = CList.chop nb_fix le in
-      mk_ctx (mkFix (indx,(names, Array.of_list ntypes, Array.of_list nbodies))) in
     let env' = push_rec_types recdefs env in
     let sub = subargs env types @ subargs env' bodies in
-    try_aux sub next_mk_ctx next
+    try_aux sub next
   | CoFix (i,(names,types,bodies as recdefs)) ->
-    let nb_fix = Array.length types in
-    let next_mk_ctx le =
-      let (ntypes,nbodies) = CList.chop nb_fix le in
-      mk_ctx (mkCoFix (i,(names, Array.of_list ntypes, Array.of_list nbodies))) in
     let env' = push_rec_types recdefs env in
     let sub = subargs env types @ subargs env' bodies in
-    try_aux sub next_mk_ctx next
+    try_aux sub next
   | Proj (p,_,c') ->
     begin match Retyping.expand_projection env sigma p c' [] with
-    | term -> aux env term mk_ctx next
+    | term -> aux env term next
     | exception Retyping.RetypeError _ -> next ()
     end
   | Array(u, t, def, ty) ->
-    let next_mk_ctx = function
-    | def :: ty :: l -> mk_ctx (mkArray(u, Array.of_list l, def, ty))
-    | _ -> assert false
-    in
     let sub = (env,def) :: (env,ty) :: subargs env t in
-    try_aux sub next_mk_ctx next
+    try_aux sub next
   | Const (cst, instance) -> 
     let cst_name = Constant.user cst in
     if not cache_unfolding || not (KerName.Set.mem cst_name !unfolded_definition_names) then
@@ -646,11 +603,7 @@ let sub_match ?(closed=true) ?(cache_unfolding=true) env sigma pat c =
       match constant.const_body with
       | Declarations.Def c ->
             (* Unfold the definition: *)
-            let next_mk_ctx = function
-            | [c] -> mk_ctx (c)
-            | _ -> assert false
-            in
-            try_aux [env, (EConstr.of_constr c)] next_mk_ctx next
+            try_aux [env, (EConstr.of_constr c)] next
       | _ -> next ()
     ) else next()
   | Construct _|Ind _|Evar _|Rel _|Meta _|Var _|Sort _|Int _|Float _|String _ ->
@@ -659,21 +612,18 @@ let sub_match ?(closed=true) ?(cache_unfolding=true) env sigma pat c =
   here next
 
   (* Tries [sub_match] for all terms in the list *)
-  and try_aux lc mk_ctx next =
+  and try_aux lc next =
     let rec try_sub_match_rec lacc lc =
       match lc with
       | [] -> next ()
       | (env, c) :: tl ->
-        let mk_ctx ce = mk_ctx (List.rev_append lacc (ce :: List.map snd tl)) in
         let next () = try_sub_match_rec (c :: lacc) tl in
-        aux env c mk_ctx next
+        aux env c next
     in
     try_sub_match_rec [] lc in
   let lempty () = IStream.Nil in
-  let result () = aux env c (fun x -> x) lempty in
+  let result () = aux env c lempty in
   IStream.thunk result
-
-let match_subterm env sigma pat c = sub_match env sigma pat c
 
 let is_matching env sigma pat c =
   try let _ = matches env sigma pat c in true

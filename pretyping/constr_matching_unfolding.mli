@@ -65,16 +65,7 @@ val instantiate_context : context -> EConstr.t -> EConstr.t
 
 (** The type of subterm matching results: a substitution + a context
    (whose hole is denoted here with [special_meta]) *)
-type matching_result =
-    { m_sub : bound_ident_map * patvar_map;
-      m_ctx : context }
-
-(** [match_subterm pat c] returns the substitution and the context
-   corresponding to each **closed** subterm of [c] matching [pat],
-   considering application contexts as well. *)
-val match_subterm : env -> Evd.evar_map ->
-  binding_bound_vars * constr_pattern -> constr ->
-  matching_result IStream.t
+type matching_result = { m_sub : bound_ident_map * patvar_map }
 
 (** [is_matching_appsubterm pat c] tells if a subterm of [c] matches
    against [pat] taking partial subterms into consideration *)
