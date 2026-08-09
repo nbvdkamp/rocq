@@ -592,14 +592,14 @@ let sub_match ?(closed=true) ?(cache_unfolding=true) env sigma pat c =
   | Const (cst, instance) -> 
     let cst_name = Constant.user cst in
     if not cache_unfolding || not (KerName.Set.mem cst_name !unfolded_definition_names) then
-    ((if cache_unfolding then unfolded_definition_names := KerName.Set.add cst_name !unfolded_definition_names);
-      let constant = EConstr.lookup_constant env sigma cst in
-      match constant.const_body with
-      | Declarations.Def c ->
-            (* Unfold the definition: *)
-            try_aux [env, (EConstr.of_constr c)] next
-      | _ -> next ()
-    ) else next()
+        ((if cache_unfolding then unfolded_definition_names := KerName.Set.add cst_name !unfolded_definition_names);
+        let constant = EConstr.lookup_constant env sigma cst in
+        match constant.const_body with
+        (* Unfold the definition: *)
+        | Declarations.Def c -> try_aux [env, (EConstr.of_constr c)] next
+        | _ -> next ())
+    else
+        next()
   | Construct _|Ind _|Evar _|Rel _|Meta _|Var _|Sort _|Int _|Float _|String _ ->
     next ()
   in
