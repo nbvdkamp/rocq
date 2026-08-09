@@ -338,9 +338,9 @@ let search_filter : _ -> filter_function = fun query gr kind env sigma typ -> ma
       let f =
         if head then Constr_matching.is_matching_head
         else if unfold_during_matching() then
-          Constr_matching_unfolding.is_matching_appsubterm ~closed:false ~cache_unfolding:true
+          Constr_matching_unfolding.is_matching_appsubterm ~cache_unfolding:true
         else if unfold_during_matching_no_cache() then
-          Constr_matching_unfolding.is_matching_appsubterm ~closed:false ~cache_unfolding:false
+          Constr_matching_unfolding.is_matching_appsubterm ~cache_unfolding:false
         else if unfold_cbv() then
           fun env sigma pat econstr ->
             let cbv_infos = create_cbv_infos RedFlags.delta env sigma ~strong:true in

@@ -526,23 +526,20 @@ let matches_head env sigma pat c =
     | _ -> c in
   matches env sigma pat head
 
-(* Tells if it is an authorized occurrence and if the instance is closed *)
-let authorized_occ env sigma closed pat c =
+(* checks if c matches pat *)
+let authorized_occ env sigma pat c =
   try
-    let subst = matches_core_closed env sigma pat c in
-    if closed && Id.Map.exists (fun _ c -> not (closed0 sigma c)) (snd subst)
-    then false
-    else true
+    let _ = matches_core_closed env sigma pat c in true
   with PatternMatchingFailure -> false
 
 let subargs env v = Array.map_to_list (fun c -> (env, c)) v
 
 (* Tries to match a subterm of [c] with [pat] *)
-let sub_match ?(closed=true) ?(cache_unfolding=true) env sigma pat c =
+let sub_match ?(cache_unfolding=true) env sigma pat c =
   let unfolded_definition_names = ref KerName.Set.empty in
   let open EConstr in
   let rec aux env c =
-  let here = authorized_occ env sigma closed pat c in
+  let here = authorized_occ env sigma pat c in
   let next () = match EConstr.kind sigma c with
   | Cast (c1,k,c2) -> try_aux [env, c1]
   | Lambda (x,c1,c2) ->
@@ -622,6 +619,6 @@ let is_matching_head env sigma pat c =
   try let _ = matches_head env sigma pat c in true
   with PatternMatchingFailure -> false
 
-let is_matching_appsubterm ?(closed=true) ?(cache_unfolding=true) env sigma pat c =
+let is_matching_appsubterm ?(cache_unfolding=true) env sigma pat c =
   let pat = (Id.Set.empty,pat) in
-  sub_match ~closed ~cache_unfolding env sigma pat c
+  sub_match ~cache_unfolding env sigma pat c
