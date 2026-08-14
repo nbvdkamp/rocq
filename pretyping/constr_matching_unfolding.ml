@@ -535,8 +535,7 @@ let authorized_occ env sigma pat c =
 let subargs env v = Array.map_to_list (fun c -> (env, c)) v
 
 (* Tries to match a subterm of [c] with [pat] *)
-let sub_match ?(cache_unfolding=true) env sigma pat c =
-  let unfolded_definition_names = ref KerName.Set.empty in
+let sub_match env sigma unfolded_definition_cache pat c =
   let open EConstr in
   let rec aux env c =
   let here = authorized_occ env sigma pat c in
@@ -587,16 +586,28 @@ let sub_match ?(cache_unfolding=true) env sigma pat c =
     let sub = (env,def) :: (env,ty) :: subargs env t in
     try_aux sub
   | Const (cst, instance) -> 
+    (* projections can cause an infinite loop of unfolding so don't unfold them *)
+    if Structures.Structure.is_projection cst then false else
     let cst_name = Constant.user cst in
-    if not cache_unfolding || not (KerName.Set.mem cst_name !unfolded_definition_names) then
-        ((if cache_unfolding then unfolded_definition_names := KerName.Set.add cst_name !unfolded_definition_names);
-        let constant = EConstr.lookup_constant env sigma cst in
+    (match unfolded_definition_cache with
+    | Some cache ->
+        if (KerName.Map.mem cst_name !cache) then
+            KerName.Map.get cst_name !cache
+        else
+            (let constant = EConstr.lookup_constant env sigma cst in
+            match constant.const_body with
+            (* Unfold the definition: *)
+            | Declarations.Def c ->
+                let result = try_aux [env, (EConstr.of_constr c)] in
+                cache := KerName.Map.add cst_name result !cache;
+                result
+            | _ -> false)
+    | None ->
+        (let constant = EConstr.lookup_constant env sigma cst in
         match constant.const_body with
         (* Unfold the definition: *)
         | Declarations.Def c -> try_aux [env, (EConstr.of_constr c)]
-        | _ -> false)
-    else
-        false
+        | _ -> false))
   | Construct _|Ind _|Evar _|Rel _|Meta _|Var _|Sort _|Int _|Float _|String _ -> false
   in
   here || next()
@@ -619,6 +630,6 @@ let is_matching_head env sigma pat c =
   try let _ = matches_head env sigma pat c in true
   with PatternMatchingFailure -> false
 
-let is_matching_appsubterm ?(cache_unfolding=true) env sigma pat c =
+let is_matching_appsubterm ?(unfolded_definition_cache=None) env sigma pat c =
   let pat = (Id.Set.empty,pat) in
-  sub_match ~cache_unfolding env sigma pat c
+  sub_match env sigma unfolded_definition_cache pat c

@@ -322,6 +322,8 @@ let { Goptions.get = unfold_during_matching_no_cache } =
 let { Goptions.get = unfold_cbv } =
   Goptions.declare_bool_option_and_ref ~key:["Search";"Unfold";"Cbv"] ~value:false ()
 
+let unfolded_definition_cache = ref KerName.Map.empty
+
 let search_filter : _ -> filter_function = fun query gr kind env sigma typ -> match query with
 | GlobSearchSubPattern (where,head,pat,subterm_cache) ->
   let open Context.Rel.Declaration in
@@ -338,9 +340,9 @@ let search_filter : _ -> filter_function = fun query gr kind env sigma typ -> ma
       let f =
         if head then Constr_matching.is_matching_head
         else if unfold_during_matching() then
-          Constr_matching_unfolding.is_matching_appsubterm ~cache_unfolding:true
+          Constr_matching_unfolding.is_matching_appsubterm ~unfolded_definition_cache:(Some unfolded_definition_cache)
         else if unfold_during_matching_no_cache() then
-          Constr_matching_unfolding.is_matching_appsubterm ~cache_unfolding:false
+          Constr_matching_unfolding.is_matching_appsubterm ~unfolded_definition_cache:None
         else if unfold_cbv() then
           fun env sigma pat econstr ->
             let cbv_infos = create_cbv_infos RedFlags.delta env sigma ~strong:true in
@@ -395,6 +397,7 @@ let search_rewrite env sigma pat mods pr_search =
 (** Search *)
 
 let search env sigma items mods pr_search =
+  unfolded_definition_cache := KerName.Map.empty;
   let filter ref kind env sigma typ =
     let eqb b1 b2 = if b1 then b2 else not b2 in
     module_filter mods ref kind env sigma typ &&
