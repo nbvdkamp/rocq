@@ -534,10 +534,63 @@ let authorized_occ env sigma pat c =
 
 let subargs env v = Array.map_to_list (fun c -> (env, c)) v
 
+(* A bounded hash of the top of the term.  Any function of a term agrees with
+   [==]; what this one has to be is O(1), where [Constr.hash] walks the whole
+   term.  Every name hash it uses is a memoized field. *)
+let rec hash_top n sigma c =
+  let open Hashset.Combine in
+  let open EConstr in
+  let sub c = if n <= 1 then 0 else hash_top (n - 1) sigma c in
+  match kind sigma c with
+  | Const (kn, _) -> combinesmall 1 (Constant.UserOrd.hash kn)
+  | Ind ((mi, i), _) -> combinesmall 2 (combine (MutInd.UserOrd.hash mi) i)
+  | Construct (((mi, i), j), _) ->
+    combinesmall 3 (combine3 (MutInd.UserOrd.hash mi) i j)
+  | Var id -> combinesmall 4 (Id.hash id)
+  | Rel i -> combinesmall 5 i
+  | App (f, args) ->
+    let k = Array.length args in
+    combinesmall 6
+      (combine3 (sub f) k (if Int.equal k 0 then 0 else sub args.(k - 1)))
+  | Lambda (_, t, b) -> combinesmall 7 (combine (sub t) (sub b))
+  | Prod (_, t, b) -> combinesmall 8 (combine (sub t) (sub b))
+  | LetIn (_, b, t, c) -> combinesmall 9 (combine3 (sub b) (sub t) (sub c))
+  | Proj (p, _, c) ->
+    combinesmall 10 (combine (Projection.CanOrd.hash p) (sub c))
+  | Case (ci, _, _, _, _, c, br) ->
+    combinesmall 11 (combine3 (Ind.UserOrd.hash ci.Constr.ci_ind)
+                       (Array.length br) (sub c))
+  | Cast (c, _, _) -> combinesmall 12 (sub c)
+  | Fix (_, (_, tl, _)) -> combinesmall 13 (Array.length tl)
+  | CoFix (_, (_, tl, _)) -> combinesmall 14 (Array.length tl)
+  | Array (_, t, _, _) -> combinesmall 15 (Array.length t)
+  | Int i -> combinesmall 16 (Uint63.hash i)
+  | Float _ -> 17
+  | String _ -> 18
+  | Sort _ -> 19
+  | Meta i -> combinesmall 20 i
+  | Evar _ -> 21
+
+let hash_top sigma c = hash_top 3 sigma c
+
+let cache_size = 1 lsl 18
+
 (* Tries to match a subterm of [c] with [pat] *)
-let sub_match env sigma unfolded_definition_cache pat c =
+let sub_match env sigma cache unfolded_definition_cache pat c =
   let open EConstr in
   let rec aux env c =
+  let (cache_hit, cached_result, hash) = match cache with
+  | Some cache -> (
+    let hash = hash_top sigma c land (cache_size - 1) in
+    let keys = !cache in
+    let (cache_hit, cached_result) = (match Array.unsafe_get keys hash with
+    | Some {Constr_matching.term; result} -> (term == c, result)
+    | None -> (false, false)) in
+    (cache_hit, cached_result, hash))
+  | None -> (false, false, 0)
+  in
+  if cache_hit then cached_result
+  else begin
   let here = authorized_occ env sigma pat c in
   let next () = match EConstr.kind sigma c with
   | Cast (c1,k,c2) -> try_aux [env, c1]
@@ -610,7 +663,12 @@ let sub_match env sigma unfolded_definition_cache pat c =
         | _ -> false))
   | Construct _|Ind _|Evar _|Rel _|Meta _|Var _|Sort _|Int _|Float _|String _ -> false
   in
-  here || next()
+  let result = here || next() in
+  let () = match cache with
+  | Some cache -> Array.unsafe_set !cache hash (Some {term = c; result}); (* add result to the cache *)
+  | None -> () in
+  result
+end
 
   (* Tries [sub_match] for all terms in the list *)
   and try_aux lc =
@@ -630,6 +688,6 @@ let is_matching_head env sigma pat c =
   try let _ = matches_head env sigma pat c in true
   with PatternMatchingFailure -> false
 
-let is_matching_appsubterm ?(unfolded_definition_cache=None) env sigma pat c =
+let is_matching_appsubterm ?(unfolded_definition_cache=None) cache env sigma pat c =
   let pat = (Id.Set.empty,pat) in
-  sub_match env sigma unfolded_definition_cache pat c
+  sub_match env sigma cache unfolded_definition_cache pat c

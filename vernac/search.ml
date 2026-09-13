@@ -316,6 +316,12 @@ let string_contains_upto ?limit ~pattern s =
 let { Goptions.get = unfold_during_matching } =
   Goptions.declare_bool_option_and_ref ~key:["Search";"Unfold";"During";"Matching"] ~value:false ()
 
+let { Goptions.get = unfold_during_matching_subterm_cache_only } =
+  Goptions.declare_bool_option_and_ref ~key:["Search";"Unfold";"During";"Matching";"Subterm";"Cache";"Only"] ~value:false ()
+
+let { Goptions.get = unfold_during_matching_unfolded_cache_only } =
+  Goptions.declare_bool_option_and_ref ~key:["Search";"Unfold";"During";"Matching";"Unfolded";"Cache";"Only"] ~value:false ()
+
 let { Goptions.get = unfold_during_matching_no_cache } =
   Goptions.declare_bool_option_and_ref ~key:["Search";"Unfold";"During";"Matching";"No";"Cache"] ~value:false ()
 
@@ -340,9 +346,13 @@ let search_filter : _ -> filter_function = fun query gr kind env sigma typ -> ma
       let f =
         if head then Constr_matching.is_matching_head
         else if unfold_during_matching() then
-          Constr_matching_unfolding.is_matching_appsubterm ~unfolded_definition_cache:(Some unfolded_definition_cache)
+          Constr_matching_unfolding.is_matching_appsubterm ~unfolded_definition_cache:(Some unfolded_definition_cache) subterm_cache
+        else if unfold_during_matching_subterm_cache_only() then
+          Constr_matching_unfolding.is_matching_appsubterm ~unfolded_definition_cache:None subterm_cache
+        else if unfold_during_matching_unfolded_cache_only() then
+          Constr_matching_unfolding.is_matching_appsubterm ~unfolded_definition_cache:(Some unfolded_definition_cache) None
         else if unfold_during_matching_no_cache() then
-          Constr_matching_unfolding.is_matching_appsubterm ~unfolded_definition_cache:None
+          Constr_matching_unfolding.is_matching_appsubterm ~unfolded_definition_cache:None None
         else if unfold_cbv() then
           fun env sigma pat econstr ->
             let cbv_infos = create_cbv_infos RedFlags.delta env sigma ~strong:true in

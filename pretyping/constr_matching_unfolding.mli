@@ -65,4 +65,4 @@ val instantiate_context : context -> EConstr.t -> EConstr.t
 
 (** [is_matching_appsubterm pat c] tells if a subterm of [c] matches
    against [pat] taking partial subterms into consideration *)
-val is_matching_appsubterm : ?unfolded_definition_cache:bool KerName.Map.t ref option -> env -> Evd.evar_map -> constr_pattern -> constr -> bool
+val is_matching_appsubterm : ?unfolded_definition_cache:bool KerName.Map.t ref option -> Constr_matching.subterm_cache option -> env -> Evd.evar_map -> constr_pattern -> constr -> bool
