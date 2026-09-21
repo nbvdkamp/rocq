@@ -328,6 +328,9 @@ let { Goptions.get = unfold_during_matching_no_cache } =
 let { Goptions.get = unfold_cbv } =
   Goptions.declare_bool_option_and_ref ~key:["Search";"Unfold";"Cbv"] ~value:false ()
 
+let { Goptions.get = no_unfolding_with_caching } =
+  Goptions.declare_bool_option_and_ref ~key:["Search";"No";"Unfolding";"With";"Caching"] ~value:false ()
+
 let unfolded_definition_cache = ref KerName.Map.empty
 
 let search_filter : _ -> filter_function = fun query gr kind env sigma typ -> match query with
@@ -359,6 +362,8 @@ let search_filter : _ -> filter_function = fun query gr kind env sigma typ -> ma
             let normalized_term = cbv_norm cbv_infos econstr in
             let normalized_pattern = Patternops.delta_normalize_pattern (env, sigma) pat in
             Constr_matching.is_matching_appsubterm ~closed:false env sigma normalized_pattern normalized_term
+        else if no_unfolding_with_caching() then
+          Constr_matching.is_matching_appsubterm_cached (Option.get subterm_cache)
         else
           Constr_matching.is_matching_appsubterm ~closed:false
       in
