@@ -34,15 +34,15 @@ editors (like emacs), to generate a list of completion candidates
 without having to parse through the types of all symbols. *)
 
 type glob_search_item =
-  | GlobSearchSubPattern of glob_search_where * bool * constr_pattern * Constr_matching.subterm_cache option
+  | GlobSearchSubPattern of glob_search_where * bool * constr_pattern * (Constr_matching.subterm_cache * (bool KerName.Map.t ref)) option
   | GlobSearchString of string
   | GlobSearchKind of (Vernacexpr.discharge * Decls.logical_kind)
   | GlobSearchFilter of (GlobRef.t -> bool)
 
 let make_search_item_sub_pattern where head pat =
-  (* only make a cache if we need one: *)
-  let cache = if head then None else Some (Constr_matching.make_subterm_cache()) in
-  GlobSearchSubPattern (where,head,pat,cache)
+  (* only make caches if we need them: *)
+  let caches = if head then None else Some (Constr_matching.make_subterm_cache(), ref KerName.Map.empty) in
+  GlobSearchSubPattern (where,head,pat,caches)
 
 let make_search_item_string s = GlobSearchString s
 
@@ -334,7 +334,7 @@ let { Goptions.get = no_unfolding_with_caching } =
 let unfolded_definition_cache = ref KerName.Map.empty
 
 let search_filter : _ -> filter_function = fun query gr kind env sigma typ -> match query with
-| GlobSearchSubPattern (where,head,pat,subterm_cache) ->
+| GlobSearchSubPattern (where,head,pat,caches) ->
   let open Context.Rel.Declaration in
   let rec collect env hyps typ =
     match Constr.kind typ with
@@ -348,24 +348,26 @@ let search_filter : _ -> filter_function = fun query gr kind env sigma typ -> ma
   List.exists (fun (env,typ) ->
       let f =
         if head then Constr_matching.is_matching_head
-        else if unfold_during_matching() then
-          Constr_matching_unfolding.is_matching_appsubterm ~unfolded_definition_cache:(Some unfolded_definition_cache) subterm_cache
-        else if unfold_during_matching_subterm_cache_only() then
-          Constr_matching_unfolding.is_matching_appsubterm ~unfolded_definition_cache:None subterm_cache
-        else if unfold_during_matching_unfolded_cache_only() then
-          Constr_matching_unfolding.is_matching_appsubterm ~unfolded_definition_cache:(Some unfolded_definition_cache) None
-        else if unfold_during_matching_no_cache() then
-          Constr_matching_unfolding.is_matching_appsubterm ~unfolded_definition_cache:None None
-        else if unfold_cbv() then
-          fun env sigma pat econstr ->
-            let cbv_infos = create_cbv_infos RedFlags.delta env sigma ~strong:true in
-            let normalized_term = cbv_norm cbv_infos econstr in
-            let normalized_pattern = Patternops.delta_normalize_pattern (env, sigma) pat in
-            Constr_matching.is_matching_appsubterm ~closed:false env sigma normalized_pattern normalized_term
-        else if no_unfolding_with_caching() then
-          Constr_matching.is_matching_appsubterm_cached (Option.get subterm_cache)
         else
-          Constr_matching.is_matching_appsubterm ~closed:false
+          let (subterm_cache, unfolded_definition_cache) = Option.get caches in
+          if unfold_during_matching() then
+            Constr_matching_unfolding.is_matching_appsubterm ~unfolded_definition_cache:(Some unfolded_definition_cache) (Some subterm_cache)
+          else if unfold_during_matching_subterm_cache_only() then
+            Constr_matching_unfolding.is_matching_appsubterm ~unfolded_definition_cache:None (Some subterm_cache)
+          else if unfold_during_matching_unfolded_cache_only() then
+            Constr_matching_unfolding.is_matching_appsubterm ~unfolded_definition_cache:(Some unfolded_definition_cache) None
+          else if unfold_during_matching_no_cache() then
+            Constr_matching_unfolding.is_matching_appsubterm ~unfolded_definition_cache:None None
+          else if unfold_cbv() then
+            fun env sigma pat econstr ->
+              let cbv_infos = create_cbv_infos RedFlags.delta env sigma ~strong:true in
+              let normalized_term = cbv_norm cbv_infos econstr in
+              let normalized_pattern = Patternops.delta_normalize_pattern (env, sigma) pat in
+              Constr_matching.is_matching_appsubterm ~closed:false env sigma normalized_pattern normalized_term
+          else if no_unfolding_with_caching() then
+            Constr_matching.is_matching_appsubterm_cached subterm_cache
+          else
+            Constr_matching.is_matching_appsubterm ~closed:false
       in
       f env sigma pat (EConstr.of_constr typ)) typl
 | GlobSearchString s -> string_contains_upto ~pattern:s (name_of_reference gr)
