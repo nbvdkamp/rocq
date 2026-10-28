@@ -649,16 +649,6 @@ let is_matching_appsubterm ?(closed=true) env sigma pat c =
   let results = sub_match ~closed env sigma pat c in
   not (IStream.is_empty results)
 
-let cache_size = 1 lsl 18
-
-type subterm_cache_entry = {
-  term: Evd.econstr;
-  result: bool;
-}
-type subterm_cache = subterm_cache_entry option array ref
-
-let make_subterm_cache () = ref (Array.make cache_size None)
-
 (* A bounded hash of the top of the term.  Any function of a term agrees with
    [==]; what this one has to be is O(1), where [Constr.hash] walks the whole
    term.  Every name hash it uses is a memoized field. *)
@@ -696,15 +686,26 @@ let rec hash_top n sigma c =
   | Meta i -> combinesmall 20 i
   | Evar _ -> 21
 
-let hash_top sigma c = hash_top 3 sigma c
+module SubtermCache = Hashtbl.Make(struct
+    (* the keys also contain sigma because hashing needs it *)
+    type t = (Evd.evar_map * Evd.econstr)
+
+    let hash (sigma, c) = hash_top 3 sigma c
+
+    (* we skip sigma in this because it's constant within each search,
+    and each cache is only used during one search *)
+    let equal (_, i) (_, j) = i == j
+  end)
+
+type subterm_cache = bool SubtermCache.t
+
+let make_subterm_cache () = SubtermCache.create 12
 
 let sub_match_cached cache env sigma pat c =
   let open EConstr in
   let rec aux env c =
-  let hash = hash_top sigma c land (cache_size - 1) in
-  let keys = !cache in
-  let (cache_hit, cached_result) = (match Array.unsafe_get keys hash with
-  | Some {term; result} -> (term == c, result)
+  let (cache_hit, cached_result) = (match SubtermCache.find_opt cache (sigma, c) with
+  | Some result -> (true, result)
   | None -> (false, false)) in
   if cache_hit then cached_result
   else begin
@@ -761,7 +762,7 @@ let sub_match_cached cache env sigma pat c =
     | Construct _|Ind _|Evar _|Const _|Rel _|Meta _|Var _|Sort _|Int _|Float _|String _ -> false
     in
     let result = here || next() in
-    Array.unsafe_set keys hash (Some {term = c; result}); (* add result to the cache *)
+    SubtermCache.add cache (sigma, c) result;
     result
   end
 
